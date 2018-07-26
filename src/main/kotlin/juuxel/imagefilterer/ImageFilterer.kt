@@ -11,6 +11,7 @@ import javax.imageio.ImageIO
 import javax.swing.*
 import javax.swing.filechooser.FileFilter
 import kotlin.concurrent.thread
+import kotlin.math.roundToInt
 import kotlin.streams.toList
 
 class ImageFilterer
@@ -40,6 +41,9 @@ class ImageFilterer
     private var filter = Filter.RED_CYAN
     private var iterations = 1
     private val progressBar = JProgressBar(SwingConstants.HORIZONTAL)
+    private val progressLabel = JLabel()
+    private val leftScrollPane = ZoomableScrollPane(inputLabel, ::inputImage)
+    private val rightScrollPane = ZoomableScrollPane(outputLabel, ::outputImage)
     private lateinit var applyButton: JMenuItem
 
     companion object
@@ -89,8 +93,8 @@ class ImageFilterer
 
         frame = JFrame("Image Filterer by Juuz")
 
-        inputLabel.border = BorderFactory.createTitledBorder("Input")
-        outputLabel.border = BorderFactory.createTitledBorder("Output")
+        leftScrollPane.border = BorderFactory.createTitledBorder("Input")
+        rightScrollPane.border = BorderFactory.createTitledBorder("Output")
         inputLabel.horizontalAlignment = SwingConstants.CENTER
         outputLabel.horizontalAlignment = SwingConstants.CENTER
 
@@ -136,15 +140,36 @@ class ImageFilterer
             add(fileMenu)
             add(filterSettings)
             add(Box.createHorizontalGlue())
+            add(progressLabel)
+            add(Box.createHorizontalStrut(5))
             add(progressBar)
         }
 
         frame.defaultCloseOperation = JFrame.EXIT_ON_CLOSE
         frame.jMenuBar = menuBar
         frame.size = Dimension(640, 480)
-        frame.contentPane = JPanel(GridLayout(1, 0)).apply {
-            add(JScrollPane(inputLabel))
-            add(JScrollPane(outputLabel))
+        frame.contentPane = JPanel(BorderLayout()).apply {
+            add(JPanel(GridLayout(1, 0)).apply {
+                add(leftScrollPane)
+                add(rightScrollPane)
+            }, BorderLayout.CENTER)
+
+            val zoomSlider = JSlider(SwingConstants.HORIZONTAL, 10, 200, 100)
+            zoomSlider.addChangeListener {
+                val zoom = zoomSlider.value.toDouble() / 100.0
+                leftScrollPane.zoom = zoom
+                rightScrollPane.zoom = zoom
+                frame.repaint()
+            }
+            zoomSlider.maximumSize = Dimension(50, 20)
+
+            add(JPanel().apply {
+                layout = BoxLayout(this, BoxLayout.X_AXIS)
+                add(Box.createHorizontalGlue())
+                add(JLabel("Zoom"))
+                add(Box.createHorizontalStrut(5))
+                add(zoomSlider)
+            }, BorderLayout.SOUTH)
         }
 
         SwingUtilities.invokeLater {
@@ -225,11 +250,22 @@ class ImageFilterer
                 }
 
                 for (i in 1..iterations)
+                {
+                    if (iterations > 1)
+                    {
+                        SwingUtilities.invokeLater {
+                            progressLabel.text = "$i / $iterations"
+                        }
+                    }
+
                     output.blur(averageFunction)
+                }
                 outputImage = output
+                rightScrollPane.refreshZoom()
             }
 
             SwingUtilities.invokeLater {
+                progressLabel.text = null
                 progressBar.isVisible = false
                 applyButton.isEnabled = true
             }
@@ -330,22 +366,4 @@ fun colorAverage(vararg colors: Int): Int
     val alphas = colorObjects.map { it.alpha }.toTypedArray().toIntArray()
 
     return Color(average(*reds), average(*greens), average(*blues), average(*alphas)).rgb
-}
-
-fun BufferedImage.scaleImageToMaxSize(size: Int): Image
-{
-    return if (width <= size)
-    {
-        if (height <= size)
-            this
-        else
-            getScaledInstance(width * size / height, size, Image.SCALE_SMOOTH)
-    }
-    else if (height <= size || width > height)
-        getScaledInstance(size, height * size / width, Image.SCALE_SMOOTH)
-    else if (height > width)
-        getScaledInstance(width * size / height, size, Image.SCALE_SMOOTH)
-    else if (width == height)
-        getScaledInstance(size, size, Image.SCALE_SMOOTH)
-    else this
 }
