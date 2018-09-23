@@ -53,3 +53,7 @@ hs_err_pid*
 out/
 *.iml
 *.ipr
+
+### Custom Gradle
+build/
+.gradle/
